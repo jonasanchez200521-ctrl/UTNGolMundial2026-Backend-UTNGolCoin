@@ -10,6 +10,9 @@ namespace UTNGolCoin.Api.Models
         // Referencia lógica a un partido que vive en el backend de Estadísticas (Alexis). No es FK local.
         public int PartidoId { get; set; }
 
+        // Hora de inicio del partido (en UTC) usada para validar el cierre de apuestas (RF17).
+        public DateTime FechaInicioPartido { get; set; }
+
         // LOCAL, EMPATE, VISITANTE
         public string Pronostico { get; set; } = string.Empty;
 

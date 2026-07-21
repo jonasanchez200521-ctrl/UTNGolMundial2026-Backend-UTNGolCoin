@@ -18,6 +18,14 @@ server=127.0.0.1;port=3307;database=utngolcoin;user=root;password=postgres
 
 > Nota: la contraseña está en texto plano en `appsettings.json` porque es un entorno académico de desarrollo local. Mejora futura: moverla a variables de entorno o a `dotnet user-secrets` antes de cualquier despliegue real.
 
+También hay una sección `EstadisticasApi` en `appsettings.json` con un placeholder:
+
+```json
+"EstadisticasApi": { "BaseUrl": "http://IP_DE_ALEXIS:PUERTO" }
+```
+
+Todavía no se usa en el código (no hay ningún `HttpClient` llamando a esta URL). El día de la integración con el backend de Alexis, ahí va la IP real de su servicio en la red, para que en el futuro el backend pueda consultar directamente la hora de los partidos en vez de confiar en el valor que manda el frontend.
+
 El `DbContext` (`Data/AppDbContext.cs`) se conecta con `UseMySql` y `ServerVersion.AutoDetect`, para que detecte automáticamente que el motor es MariaDB. La primera migración (`InicialCreacion`) ya se aplicó y creó la base `utngolcoin` y las 4 tablas.
 
 ### Modelo de datos
@@ -26,7 +34,7 @@ Todas las tablas son registros planos: se referencian por Id pero no usan relaci
 
 - **Billeteras**: `Id`, `UsuarioId` (referencia lógica al usuario, que vive en el backend de Estadísticas de Alexis, no es FK local), `Saldo` (decimal 18,2), `FechaCreacion`.
 - **Transacciones**: `Id`, `BilleteraId`, `Tipo` (BIENVENIDA, PREDICCION, PREMIO, BONO_DIARIO), `Monto` (decimal 18,2), `SaldoResultante` (decimal 18,2), `Referencia` (texto opcional), `Fecha`. Es un ledger: solo se inserta, nunca se edita ni se borra.
-- **Predicciones**: `Id`, `UsuarioId`, `PartidoId` (referencia lógica a un partido en Estadísticas), `Pronostico` (LOCAL, EMPATE, VISITANTE), `Monto` (decimal 18,2), `Cuota` (decimal 9,2), `Estado` (PENDIENTE, GANADA, PERDIDA), `Fecha`.
+- **Predicciones**: `Id`, `UsuarioId`, `PartidoId` (referencia lógica a un partido en Estadísticas), `FechaInicioPartido` (hora de inicio del partido en UTC, usada para el cierre de apuestas RF17 y guardada como referencia/auditoría de con qué hora se validó la apuesta), `Pronostico` (LOCAL, EMPATE, VISITANTE), `Monto` (decimal 18,2), `Cuota` (decimal 9,2), `Estado` (PENDIENTE, GANADA, PERDIDA), `Fecha`.
 - **BonosDiarios**: `Id`, `UsuarioId`, `Fecha` (tipo fecha sin hora). Tiene un índice único en (`UsuarioId`, `Fecha`) para que la base impida directamente que se otorgue más de un bono al mismo usuario el mismo día.
 
 ## Endpoints (para Fer - frontend)
@@ -59,16 +67,18 @@ Crea una apuesta 1X2 sobre un partido (el partido vive en el backend de Estadís
 
 - **Body (JSON):**
   ```json
-  { "usuarioId": 501, "partidoId": 1001, "pronostico": "LOCAL", "monto": 4 }
+  { "usuarioId": 501, "partidoId": 1001, "fechaInicioPartido": "2026-08-01T20:00:00Z", "pronostico": "LOCAL", "monto": 4 }
   ```
-  `pronostico` acepta `LOCAL`, `EMPATE` o `VISITANTE` (no distingue mayúsculas/minúsculas).
+  `pronostico` acepta `LOCAL`, `EMPATE` o `VISITANTE` (no distingue mayúsculas/minúsculas). **`fechaInicioPartido` debe mandarse en UTC, en formato ISO 8601 con la "Z" al final** (ej. `2026-08-01T20:00:00Z`), no en hora local de Argentina. Si Fer manda la hora local, tiene que convertirla a UTC antes (restarle las horas de diferencia) para que la validación de cierre compare correctamente contra la hora del servidor.
 - **201 Created** - predicción creada:
   ```json
-  { "id": 1, "usuarioId": 501, "partidoId": 1001, "pronostico": "LOCAL", "monto": 4.00, "cuota": 2.00, "estado": "PENDIENTE", "fecha": "2026-07-21T23:10:48Z" }
+  { "id": 1, "usuarioId": 501, "partidoId": 1001, "fechaInicioPartido": "2026-08-01T20:00:00Z", "pronostico": "LOCAL", "monto": 4.00, "cuota": 2.00, "estado": "PENDIENTE", "fecha": "2026-07-21T23:10:48Z" }
   ```
-- **400 Bad Request** - si `usuarioId`/`partidoId` faltan o son <= 0, si el monto es <= 0, si el pronóstico no es LOCAL/EMPATE/VISITANTE, o si el saldo es insuficiente para el monto pedido.
+- **400 Bad Request** - si `usuarioId`/`partidoId` faltan o son <= 0, si el monto es <= 0, si el pronóstico no es LOCAL/EMPATE/VISITANTE, si `fechaInicioPartido` ya pasó (mensaje "Las apuestas para este partido ya cerraron", RF17), o si el saldo es insuficiente para el monto pedido.
 - **404 Not Found** - si el usuario no tiene billetera creada todavía.
 - **409 Conflict** - si el usuario ya tiene una predicción para ese mismo partido.
+
+**Cierre de apuestas por hora (RF17):** no se puede apostar a un partido cuya hora de inicio ya pasó (o es exactamente ahora). Por ahora se confía en el `fechaInicioPartido` que manda el frontend, porque el partido en sí vive en el backend de Estadísticas de Alexis y todavía no hay integración directa con ese servicio. El día que esa integración exista, esta validación se puede reforzar consultando la hora real del partido en la API de Alexis (ver sección `EstadisticasApi` más abajo) en vez de confiar en el dato del frontend.
 
 **Cuotas fijas** (constante `CuotasPorPronostico` en `Services/PrediccionService.cs`, fácil de cambiar): LOCAL = 2.0, EMPATE = 3.0, VISITANTE = 2.5. El proyecto no exige cuotas dinámicas, así que se guarda esta cuota fija en la predicción para usarla más adelante al pagar el premio.
 
@@ -121,9 +131,17 @@ Devuelve todas las predicciones de un usuario (más recientes primero), con su e
 - Creado `Controllers/PrediccionesController.cs` con `POST /api/predicciones` y `GET /api/predicciones/usuario/{usuarioId}` (documentados arriba).
 - Probado manualmente: apuesta válida descuenta saldo y crea transacción + predicción; apostar más del saldo da 400; apostar dos veces al mismo partido da 409; usuario sin billetera da 404; pronóstico o monto inválido dan 400.
 
+### Sesión 5 - Cierre de apuestas por hora del partido, RF17 (hecha)
+- Agregado el campo `FechaInicioPartido` a la entidad `Prediccion` (migración `AgregarFechaInicioPartidoAPredicciones`) para guardar con qué hora se validó cada apuesta.
+- `POST /api/predicciones` ahora recibe también `fechaInicioPartido` (UTC, ISO 8601 con "Z").
+- Nueva validación en `PrediccionService`, agregada en el orden: monto > 0 -> pronóstico válido -> partido no cerrado por hora (`fechaInicioPartido` no puede ser anterior o igual a la hora actual del servidor) -> billetera existe -> saldo suficiente -> no hay apuesta duplicada.
+- Agregada la sección `EstadisticasApi` en `appsettings.json` (placeholder de `BaseUrl`, todavía sin usar en código) para cuando exista integración directa con el backend de Alexis.
+- Probado manualmente: partido con fecha futura permite apostar normalmente; partido con fecha pasada se rechaza con 400 y el mensaje "Las apuestas para este partido ya cerraron"; se confirmó que las validaciones de billetera/saldo/duplicado de la Sesión 4 siguen funcionando igual.
+
 ## Pendiente
 
 - Modelado de entidades adicionales si hicieran falta (partidos, catálogo de usuarios local, etc.).
 - Lógica de liquidación de predicciones (marcar GANADA/PERDIDA y pagar el premio cuando Alexis informe el resultado).
 - Endpoint `POST /api/utngolcoin/liquidacion` para el webhook de Alexis.
 - Endpoint para bono diario (usa la tabla `BonosDiarios` ya creada).
+- Integración real con la API de Estadísticas de Alexis (usar `EstadisticasApi:BaseUrl` para consultar la hora de los partidos en vez de confiar en el frontend).

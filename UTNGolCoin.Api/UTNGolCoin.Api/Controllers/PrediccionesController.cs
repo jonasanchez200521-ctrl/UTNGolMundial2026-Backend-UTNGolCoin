@@ -26,7 +26,7 @@ namespace UTNGolCoin.Api.Controllers
             try
             {
                 var prediccion = await _prediccionService.CrearPrediccionAsync(
-                    request.UsuarioId, request.PartidoId, request.Pronostico, request.Monto);
+                    request.UsuarioId, request.PartidoId, request.Pronostico, request.Monto, request.FechaInicioPartido);
 
                 return CreatedAtAction(nameof(ObtenerPorUsuario), new { usuarioId = prediccion.UsuarioId }, prediccion);
             }

@@ -25,7 +25,7 @@ namespace UTNGolCoin.Api.Services
             _context = context;
         }
 
-        public async Task<PrediccionResponse> CrearPrediccionAsync(int usuarioId, int partidoId, string pronostico, decimal monto)
+        public async Task<PrediccionResponse> CrearPrediccionAsync(int usuarioId, int partidoId, string pronostico, decimal monto, DateTime fechaInicioPartido)
         {
             if (monto <= 0)
             {
@@ -36,6 +36,22 @@ namespace UTNGolCoin.Api.Services
             if (!CuotasPorPronostico.TryGetValue(pronosticoNormalizado, out var cuota))
             {
                 throw new ArgumentException("El pronóstico debe ser LOCAL, EMPATE o VISITANTE.");
+            }
+
+            // RF17: no se puede apostar a un partido que ya empezó.
+            // La hora de inicio la manda el frontend (Fer) porque el partido vive en Estadísticas (Alexis).
+            // Integración futura: en vez de confiar en el valor recibido, se podría consultar la hora
+            // directamente a la API de Alexis usando la URL configurada en "EstadisticasApi:BaseUrl"
+            // (appsettings.json) el día que ese servicio esté disponible en la red.
+            var fechaInicioUtc = fechaInicioPartido.Kind switch
+            {
+                DateTimeKind.Utc => fechaInicioPartido,
+                DateTimeKind.Local => fechaInicioPartido.ToUniversalTime(),
+                _ => DateTime.SpecifyKind(fechaInicioPartido, DateTimeKind.Utc)
+            };
+            if (fechaInicioUtc <= DateTime.UtcNow)
+            {
+                throw new ArgumentException("Las apuestas para este partido ya cerraron.");
             }
 
             var billetera = await _context.Billeteras.FirstOrDefaultAsync(b => b.UsuarioId == usuarioId);
@@ -66,6 +82,7 @@ namespace UTNGolCoin.Api.Services
             {
                 UsuarioId = usuarioId,
                 PartidoId = partidoId,
+                FechaInicioPartido = fechaInicioUtc,
                 Pronostico = pronosticoNormalizado,
                 Monto = monto,
                 Cuota = cuota,
@@ -109,6 +126,7 @@ namespace UTNGolCoin.Api.Services
                 Id = prediccion.Id,
                 UsuarioId = prediccion.UsuarioId,
                 PartidoId = prediccion.PartidoId,
+                FechaInicioPartido = prediccion.FechaInicioPartido,
                 Pronostico = prediccion.Pronostico,
                 Monto = prediccion.Monto,
                 Cuota = prediccion.Cuota,

@@ -5,6 +5,7 @@ namespace UTNGolCoin.Api.Services.Dtos
         public int Id { get; set; }
         public int UsuarioId { get; set; }
         public int PartidoId { get; set; }
+        public DateTime FechaInicioPartido { get; set; }
         public string Pronostico { get; set; } = string.Empty;
         public decimal Monto { get; set; }
         public decimal Cuota { get; set; }
