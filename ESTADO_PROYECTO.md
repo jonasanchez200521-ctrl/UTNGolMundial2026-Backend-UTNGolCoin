@@ -91,6 +91,31 @@ Devuelve todas las predicciones de un usuario (más recientes primero), con su e
   ```
   Si el usuario no tiene predicciones, devuelve una lista vacía `[]` (no es un error).
 
+### `POST /api/utngolcoin/liquidacion` - contrato con Alexis (Estadísticas)
+
+**Esta es la ruta exacta que Alexis debe llamar** cuando su backend registra el resultado final de un partido. El mismo endpoint también sirve para disparar la liquidación **manualmente desde Swagger** durante la exposición, si Alexis no está conectado: llamarlo a mano con el `partidoId` y el `resultado` funciona exactamente igual que si lo llamara su sistema.
+
+- **Body (JSON) que espera de Alexis:**
+  ```json
+  { "partidoId": 1001, "resultado": "LOCAL" }
+  ```
+  - `partidoId` (número, obligatorio): el mismo id de partido que se usó al crear las predicciones.
+  - `resultado` (texto, obligatorio): `LOCAL`, `EMPATE` o `VISITANTE` (no distingue mayúsculas/minúsculas). Es el resultado final del partido, no el pronóstico de nadie.
+  - Alexis puede mandar campos extra en el mismo body (ej. `fase`, `grupo`, según su documento) **sin que rompan la petición**: el backend los ignora automáticamente porque no están declarados en el DTO.
+- **200 OK - resumen de la liquidación:**
+  ```json
+  { "partidoId": 1001, "liquidadas": 3, "ganadas": 1, "perdidas": 2, "totalPagado": 8.00 }
+  ```
+  - `liquidadas`: cuántas predicciones PENDIENTES de ese partido se procesaron en esta llamada.
+  - `ganadas` / `perdidas`: cuántas de esas pasaron a GANADA o PERDIDA.
+  - `totalPagado`: suma de todos los premios pagados (monto × cuota) en esta llamada.
+- **400 Bad Request** - si `partidoId` falta o es <= 0, o si `resultado` no es LOCAL/EMPATE/VISITANTE.
+- Si el partido no tiene ninguna predicción PENDIENTE (porque nadie apostó, o porque ya se liquidó antes), **no es un error**: responde `200 OK` con `liquidadas: 0`.
+
+**Qué hace al liquidar:** busca todas las predicciones PENDIENTES de ese `partidoId`. Las que coinciden con el `resultado` pasan a GANADA, se les paga `monto × cuota` (sumado a su billetera) y se registra una transacción tipo `PREMIO`. Las que no coinciden pasan a PERDIDA sin ningún pago (el monto ya se había descontado al apostar). Todo se guarda en una misma transacción de base de datos.
+
+**Idempotencia:** el endpoint solo toca predicciones en estado PENDIENTE. Una vez liquidadas, quedan en GANADA/PERDIDA, así que si Alexis llama dos veces por el mismo partido (por sus reintentos configurados), o si lo llamás vos manualmente de nuevo, la segunda llamada no encuentra pendientes y responde `liquidadas: 0` sin pagar de nuevo. Probado manualmente: la segunda llamada al mismo partido no modifica el saldo.
+
 ## Estructura de carpetas (dentro de `UTNGolCoin.Api/UTNGolCoin.Api`)
 
 - `Controllers/` - Controladores de la API.
@@ -138,10 +163,14 @@ Devuelve todas las predicciones de un usuario (más recientes primero), con su e
 - Agregada la sección `EstadisticasApi` en `appsettings.json` (placeholder de `BaseUrl`, todavía sin usar en código) para cuando exista integración directa con el backend de Alexis.
 - Probado manualmente: partido con fecha futura permite apostar normalmente; partido con fecha pasada se rechaza con 400 y el mensaje "Las apuestas para este partido ya cerraron"; se confirmó que las validaciones de billetera/saldo/duplicado de la Sesión 4 siguen funcionando igual.
 
+### Sesión 6 - Liquidación de premios, RF12 y RF19 (hecha)
+- Creado `Services/LiquidacionService.cs`: busca las predicciones PENDIENTES de un partido, paga `monto × cuota` a las que coinciden con el resultado (GANADA, con transacción tipo `PREMIO`) y marca sin pago a las que no (PERDIDA). Todo dentro de una misma transacción de base de datos.
+- Creado `Controllers/LiquidacionController.cs` con la ruta exacta `POST /api/utngolcoin/liquidacion` (documentado como contrato con Alexis más arriba). El mismo endpoint sirve para disparo manual desde Swagger en la demo.
+- Idempotencia por diseño: solo se procesan predicciones PENDIENTES, así que llamar dos veces al mismo partido no vuelve a pagar (segunda llamada devuelve `liquidadas: 0`).
+- Probado manualmente el flujo completo: apuesta -> liquidar con resultado ganador (sube el saldo, transacción PREMIO, estado GANADA) -> apuesta que pierde -> liquidar (sin pago, estado PERDIDA) -> volver a liquidar el mismo partido (0 liquidadas, saldo sin cambios) -> resultado inválido (400) -> partido sin apuestas (200, 0 liquidadas) -> campos extra tipo `fase`/`grupo` no rompen la petición.
+
 ## Pendiente
 
 - Modelado de entidades adicionales si hicieran falta (partidos, catálogo de usuarios local, etc.).
-- Lógica de liquidación de predicciones (marcar GANADA/PERDIDA y pagar el premio cuando Alexis informe el resultado).
-- Endpoint `POST /api/utngolcoin/liquidacion` para el webhook de Alexis.
 - Endpoint para bono diario (usa la tabla `BonosDiarios` ya creada).
 - Integración real con la API de Estadísticas de Alexis (usar `EstadisticasApi:BaseUrl` para consultar la hora de los partidos en vez de confiar en el frontend).
