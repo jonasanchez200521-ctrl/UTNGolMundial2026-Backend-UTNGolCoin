@@ -42,6 +42,7 @@ namespace UTNGolCoin.Api
                 options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
 
             builder.Services.AddScoped<BilleteraService>();
+            builder.Services.AddScoped<PrediccionService>();
 
             var app = builder.Build();
 

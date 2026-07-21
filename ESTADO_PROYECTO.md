@@ -54,6 +54,33 @@ Devuelve el saldo y los datos de la billetera de un usuario.
   ```
 - **404 Not Found** - si ese usuario todavía no tiene billetera creada.
 
+### `POST /api/predicciones`
+Crea una apuesta 1X2 sobre un partido (el partido vive en el backend de Estadísticas de Alexis, acá solo se guarda su `PartidoId`). Descuenta el monto de la billetera, registra la transacción `PREDICCION` (con monto negativo) y crea la predicción en estado `PENDIENTE`.
+
+- **Body (JSON):**
+  ```json
+  { "usuarioId": 501, "partidoId": 1001, "pronostico": "LOCAL", "monto": 4 }
+  ```
+  `pronostico` acepta `LOCAL`, `EMPATE` o `VISITANTE` (no distingue mayúsculas/minúsculas).
+- **201 Created** - predicción creada:
+  ```json
+  { "id": 1, "usuarioId": 501, "partidoId": 1001, "pronostico": "LOCAL", "monto": 4.00, "cuota": 2.00, "estado": "PENDIENTE", "fecha": "2026-07-21T23:10:48Z" }
+  ```
+- **400 Bad Request** - si `usuarioId`/`partidoId` faltan o son <= 0, si el monto es <= 0, si el pronóstico no es LOCAL/EMPATE/VISITANTE, o si el saldo es insuficiente para el monto pedido.
+- **404 Not Found** - si el usuario no tiene billetera creada todavía.
+- **409 Conflict** - si el usuario ya tiene una predicción para ese mismo partido.
+
+**Cuotas fijas** (constante `CuotasPorPronostico` en `Services/PrediccionService.cs`, fácil de cambiar): LOCAL = 2.0, EMPATE = 3.0, VISITANTE = 2.5. El proyecto no exige cuotas dinámicas, así que se guarda esta cuota fija en la predicción para usarla más adelante al pagar el premio.
+
+### `GET /api/predicciones/usuario/{usuarioId}`
+Devuelve todas las predicciones de un usuario (más recientes primero), con su estado actual.
+
+- **200 OK:**
+  ```json
+  [{ "id": 1, "usuarioId": 501, "partidoId": 1001, "pronostico": "LOCAL", "monto": 4.00, "cuota": 2.00, "estado": "PENDIENTE", "fecha": "2026-07-21T23:10:48Z" }]
+  ```
+  Si el usuario no tiene predicciones, devuelve una lista vacía `[]` (no es un error).
+
 ## Estructura de carpetas (dentro de `UTNGolCoin.Api/UTNGolCoin.Api`)
 
 - `Controllers/` - Controladores de la API.
@@ -87,9 +114,16 @@ Devuelve el saldo y los datos de la billetera de un usuario.
 - Creado `Controllers/BilleterasController.cs` con `POST /api/billeteras` y `GET /api/billeteras/{usuarioId}` (documentados arriba).
 - Probado manualmente: crear billetera da saldo 10 y genera la transacción BIENVENIDA, consultar saldo funciona, y crear la misma billetera dos veces devuelve 409.
 
+### Sesión 4 - Apuestas / predicciones (hecha)
+- Creado `Services/PrediccionService.cs`: valida que el usuario tenga billetera (404 si no), que el monto sea mayor a 0, que el pronóstico sea válido, que el saldo alcance, y que no exista ya una predicción del usuario para ese partido (409). Si todo es válido, descuenta el saldo, registra la transacción `PREDICCION` (monto negativo, `Referencia` = id de la predicción) y crea la predicción en `PENDIENTE`, todo dentro de una misma transacción de base de datos.
+- Cuotas fijas por pronóstico: LOCAL 2.0, EMPATE 3.0, VISITANTE 2.5 (constante fácil de cambiar en el servicio).
+- Creados los DTOs `CrearPrediccionRequest` y `PrediccionResponse`.
+- Creado `Controllers/PrediccionesController.cs` con `POST /api/predicciones` y `GET /api/predicciones/usuario/{usuarioId}` (documentados arriba).
+- Probado manualmente: apuesta válida descuenta saldo y crea transacción + predicción; apostar más del saldo da 400; apostar dos veces al mismo partido da 409; usuario sin billetera da 404; pronóstico o monto inválido dan 400.
+
 ## Pendiente
 
 - Modelado de entidades adicionales si hicieran falta (partidos, catálogo de usuarios local, etc.).
-- Lógica de negocio de apuestas y liquidación.
+- Lógica de liquidación de predicciones (marcar GANADA/PERDIDA y pagar el premio cuando Alexis informe el resultado).
 - Endpoint `POST /api/utngolcoin/liquidacion` para el webhook de Alexis.
 - Endpoint para bono diario (usa la tabla `BonosDiarios` ya creada).
