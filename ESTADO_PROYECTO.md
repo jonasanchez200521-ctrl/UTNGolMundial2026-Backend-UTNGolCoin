@@ -82,14 +82,30 @@ Crea una apuesta 1X2 sobre un partido (el partido vive en el backend de Estadís
 
 **Cuotas fijas** (constante `CuotasPorPronostico` en `Services/PrediccionService.cs`, fácil de cambiar): LOCAL = 2.0, EMPATE = 3.0, VISITANTE = 2.5. El proyecto no exige cuotas dinámicas, así que se guarda esta cuota fija en la predicción para usarla más adelante al pagar el premio.
 
-### `GET /api/predicciones/usuario/{usuarioId}`
-Devuelve todas las predicciones de un usuario (más recientes primero), con su estado actual.
+### `GET /api/predicciones/usuario/{usuarioId}` (RF22)
+Devuelve todas las predicciones de un usuario (más recientes primero), con su estado actual. Ya traía todos los campos que Fer necesita para mostrar el detalle de cada apuesta, así que no hizo falta cambiarla en la Sesión 8; solo se revisó y se confirmó que cumple RF22 tal cual estaba.
 
 - **200 OK:**
   ```json
-  [{ "id": 1, "usuarioId": 501, "partidoId": 1001, "pronostico": "LOCAL", "monto": 4.00, "cuota": 2.00, "estado": "PENDIENTE", "fecha": "2026-07-21T23:10:48Z" }]
+  [{ "id": 1, "usuarioId": 501, "partidoId": 1001, "fechaInicioPartido": "2026-08-01T20:00:00Z", "pronostico": "LOCAL", "monto": 4.00, "cuota": 2.00, "estado": "PENDIENTE", "fecha": "2026-07-21T23:10:48Z" }]
   ```
-  Si el usuario no tiene predicciones, devuelve una lista vacía `[]` (no es un error).
+  `estado` puede ser `PENDIENTE`, `GANADA` o `PERDIDA`. Si el usuario no tiene predicciones, devuelve una lista vacía `[]` (no es un error).
+
+### `GET /api/ranking` (RF21)
+Devuelve la tabla de clasificación pública de usuarios, para que Fer la muestre en el frontend. Incluye a todo usuario que tenga billetera, aunque no haya apostado todavía (con 0 aciertos).
+
+- **Parámetro opcional:** `?top=N` para limitar a los primeros N puestos. Sin el parámetro, devuelve a todos los usuarios.
+- **200 OK:**
+  ```json
+  [
+    { "usuarioId": 900, "saldo": 14.00, "aciertos": 1, "totalPredicciones": 1 },
+    { "usuarioId": 902, "saldo": 11.00, "aciertos": 1, "totalPredicciones": 2 },
+    { "usuarioId": 100, "saldo": 5.00, "aciertos": 0, "totalPredicciones": 2 }
+  ]
+  ```
+- **400 Bad Request** - si `top` es <= 0.
+
+**Criterio de orden usado:** primero por `saldo` descendente (es la métrica principal del juego: cuánto UTNGolCoin tiene acumulado cada usuario), y como desempate, por `aciertos` (predicciones GANADA) descendente, para distinguir entre usuarios que quedaron con el mismo saldo pero acertaron más pronósticos.
 
 ### `POST /api/utngolcoin/liquidacion` - contrato con Alexis (Estadísticas)
 
@@ -168,6 +184,12 @@ Devuelve todas las predicciones de un usuario (más recientes primero), con su e
 - Creado `Controllers/LiquidacionController.cs` con la ruta exacta `POST /api/utngolcoin/liquidacion` (documentado como contrato con Alexis más arriba). El mismo endpoint sirve para disparo manual desde Swagger en la demo.
 - Idempotencia por diseño: solo se procesan predicciones PENDIENTES, así que llamar dos veces al mismo partido no vuelve a pagar (segunda llamada devuelve `liquidadas: 0`).
 - Probado manualmente el flujo completo: apuesta -> liquidar con resultado ganador (sube el saldo, transacción PREMIO, estado GANADA) -> apuesta que pierde -> liquidar (sin pago, estado PERDIDA) -> volver a liquidar el mismo partido (0 liquidadas, saldo sin cambios) -> resultado inválido (400) -> partido sin apuestas (200, 0 liquidadas) -> campos extra tipo `fase`/`grupo` no rompen la petición.
+
+### Sesión 8 - Ranking y consulta de apuestas, RF21 y RF22 (hecha)
+- Creado `Services/RankingService.cs`: junta cada billetera con sus predicciones (aciertos = GANADA, total = todas), ordenado por saldo descendente y, como desempate, por aciertos descendente.
+- Creado `Controllers/RankingController.cs` con `GET /api/ranking` (parámetro opcional `?top=N`, documentado arriba).
+- Revisado `GET /api/predicciones/usuario/{usuarioId}` (de la Sesión 4): ya devolvía `partidoId`, `pronostico`, `monto`, `cuota`, `estado` y `fecha`, así que cumple RF22 sin cambios.
+- Probado manualmente con dos usuarios: apuestas ganadas y perdidas repartidas entre ambos, liquidadas, y se confirmó que el ranking los ordena bien por saldo y que el desempate por aciertos funciona entre usuarios con el mismo saldo.
 
 ## Pendiente
 

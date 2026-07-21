@@ -44,6 +44,7 @@ namespace UTNGolCoin.Api
             builder.Services.AddScoped<BilleteraService>();
             builder.Services.AddScoped<PrediccionService>();
             builder.Services.AddScoped<LiquidacionService>();
+            builder.Services.AddScoped<RankingService>();
 
             var app = builder.Build();
 
