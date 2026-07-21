@@ -29,6 +29,31 @@ Todas las tablas son registros planos: se referencian por Id pero no usan relaci
 - **Predicciones**: `Id`, `UsuarioId`, `PartidoId` (referencia lógica a un partido en Estadísticas), `Pronostico` (LOCAL, EMPATE, VISITANTE), `Monto` (decimal 18,2), `Cuota` (decimal 9,2), `Estado` (PENDIENTE, GANADA, PERDIDA), `Fecha`.
 - **BonosDiarios**: `Id`, `UsuarioId`, `Fecha` (tipo fecha sin hora). Tiene un índice único en (`UsuarioId`, `Fecha`) para que la base impida directamente que se otorgue más de un bono al mismo usuario el mismo día.
 
+## Endpoints (para Fer - frontend)
+
+### `POST /api/billeteras`
+Crea la billetera de un usuario nuevo y le acredita el bono de bienvenida de 10 UTNGolCoin (queda registrado como transacción tipo `BIENVENIDA` en el ledger). El usuario en sí no se crea acá: solo su billetera, referenciada por `UsuarioId`.
+
+- **Body (JSON):**
+  ```json
+  { "usuarioId": 501 }
+  ```
+- **201 Created** - billetera creada:
+  ```json
+  { "id": 1, "usuarioId": 501, "saldo": 10.00, "fechaCreacion": "2026-07-21T22:43:34Z" }
+  ```
+- **400 Bad Request** - si `usuarioId` falta o es <= 0.
+- **409 Conflict** - si ese usuario ya tiene una billetera creada.
+
+### `GET /api/billeteras/{usuarioId}`
+Devuelve el saldo y los datos de la billetera de un usuario.
+
+- **200 OK:**
+  ```json
+  { "id": 1, "usuarioId": 501, "saldo": 10.00, "fechaCreacion": "2026-07-21T22:43:34Z" }
+  ```
+- **404 Not Found** - si ese usuario todavía no tiene billetera creada.
+
 ## Estructura de carpetas (dentro de `UTNGolCoin.Api/UTNGolCoin.Api`)
 
 - `Controllers/` - Controladores de la API.
@@ -56,8 +81,15 @@ Todas las tablas son registros planos: se referencian por Id pero no usan relaci
 - Configurada la cadena de conexión a MariaDB y registrado el DbContext en `Program.cs` con `ServerVersion.AutoDetect`.
 - Migración `InicialCreacion` creada y aplicada: la base `utngolcoin` y las 4 tablas ya existen en MariaDB (127.0.0.1:3307).
 
+### Sesión 3 - Billetera y bono de bienvenida (hecha)
+- Creado `Services/BilleteraService.cs`: crea la billetera de un usuario con saldo inicial de 10 y registra la transacción `BIENVENIDA` en el ledger (billetera + transacción se guardan dentro de una misma transacción de base de datos); también consulta la billetera por `UsuarioId`.
+- Creados los DTOs `Services/Dtos/CrearBilleteraRequest.cs` y `Services/Dtos/BilleteraResponse.cs` (los controladores no exponen las entidades de EF directamente).
+- Creado `Controllers/BilleterasController.cs` con `POST /api/billeteras` y `GET /api/billeteras/{usuarioId}` (documentados arriba).
+- Probado manualmente: crear billetera da saldo 10 y genera la transacción BIENVENIDA, consultar saldo funciona, y crear la misma billetera dos veces devuelve 409.
+
 ## Pendiente
 
 - Modelado de entidades adicionales si hicieran falta (partidos, catálogo de usuarios local, etc.).
-- Lógica de negocio de apuestas y liquidación (servicios en `Services/`).
+- Lógica de negocio de apuestas y liquidación.
 - Endpoint `POST /api/utngolcoin/liquidacion` para el webhook de Alexis.
+- Endpoint para bono diario (usa la tabla `BonosDiarios` ya creada).

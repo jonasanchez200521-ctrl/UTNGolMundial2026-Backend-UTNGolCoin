@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using UTNGolCoin.Api.Data;
+using UTNGolCoin.Api.Services;
 
 namespace UTNGolCoin.Api
 {
@@ -39,6 +40,8 @@ namespace UTNGolCoin.Api
             var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
             builder.Services.AddDbContext<AppDbContext>(options =>
                 options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
+
+            builder.Services.AddScoped<BilleteraService>();
 
             var app = builder.Build();
 
