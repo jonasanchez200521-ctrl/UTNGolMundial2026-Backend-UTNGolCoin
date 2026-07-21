@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+using UTNGolCoin.Api.Data;
 
 namespace UTNGolCoin.Api
 {
@@ -33,6 +35,10 @@ namespace UTNGolCoin.Api
                           .AllowAnyMethod();
                 });
             });
+
+            var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+            builder.Services.AddDbContext<AppDbContext>(options =>
+                options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
 
             var app = builder.Build();
 
