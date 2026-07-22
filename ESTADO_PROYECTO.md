@@ -245,6 +245,21 @@ Consulta si un usuario está en bancarrota y si ya recibió el bono hoy.
 
 ---
 
+### `GET /api/transacciones/usuario/{usuarioId}` (RF14)
+Historial completo de transacciones (el ledger) de un usuario: bonos, predicciones y premios, ordenado del más reciente al más antiguo.
+- **200 OK:**
+  ```json
+  [
+    { "id": 15, "tipo": "PREMIO", "monto": 8.00, "saldoResultante": 14.00, "referencia": "7", "fecha": "2026-07-21T23:48:26Z" },
+    { "id": 14, "tipo": "PREDICCION", "monto": -4.00, "saldoResultante": 6.00, "referencia": "7", "fecha": "2026-07-21T23:44:45Z" },
+    { "id": 13, "tipo": "BIENVENIDA", "monto": 10.00, "saldoResultante": 10.00, "referencia": null, "fecha": "2026-07-21T23:43:17Z" }
+  ]
+  ```
+  `tipo` puede ser `BIENVENIDA`, `PREDICCION`, `PREMIO` o `BONO_DIARIO`. `monto` puede ser negativo (ej. al apostar). `referencia` es opcional (ej. id de la predicción relacionada).
+- **404:** el usuario no tiene billetera creada.
+
+---
+
 ### `GET /api/reportes/monedas-circulacion` (RF27)
 - **200 OK:** `{ "totalMonedasEnCirculacion": 20.00, "cantidadBilleteras": 3, "totalPagadoEnPremios": 8.00 }`
 
@@ -310,6 +325,12 @@ No hace falta ningún endpoint especial para dejar a un usuario en saldo 0 — a
 - Actualizado `README.md` con una versión corta y presentable.
 - Verificación final: compila sin errores ni advertencias, y se probaron manualmente los 11 endpoints con datos reales contra la base.
 
+### Verificación posterior - RF14, historial de transacciones
+Al revisar el proyecto contra el enunciado se detectó que **RF14 no estaba cubierto**: existía el ledger (`Transacciones`) pero ningún endpoint lo consultaba, solo se insertaba. Se agregó:
+- `Services/TransaccionService.cs`: busca la billetera del usuario y devuelve sus transacciones ordenadas de la más reciente a la más antigua.
+- `Controllers/TransaccionesController.cs` con `GET /api/transacciones/usuario/{usuarioId}` (documentado arriba).
+- Probado con el usuario 900 (que tenía BIENVENIDA, PREDICCION y PREMIO en su historial): las tres filas aparecen correctas y en el orden esperado; usuario sin billetera da 404.
+
 ## 14. Checklist de requisitos funcionales cubiertos
 
 Requisitos explícitamente identificados y trabajados sesión por sesión, con su implementación probada:
@@ -317,6 +338,7 @@ Requisitos explícitamente identificados y trabajados sesión por sesión, con s
 | Requisito | Cubierto | Dónde |
 |---|---|---|
 | RF12 - Liquidación de apuestas al terminar el partido | ✅ | `POST /api/utngolcoin/liquidacion`, Sesión 6 |
+| RF14 - Historial de transacciones del usuario | ✅ | `GET /api/transacciones/usuario/{usuarioId}`, verificación posterior a la Sesión 10 |
 | RF17 - No apostar a partido ya iniciado | ✅ | Validación en `PrediccionService`, Sesión 5 |
 | RF19 - Webhook de resultado desde Estadísticas | ✅ | `POST /api/utngolcoin/liquidacion`, Sesión 6 |
 | RF20 - Bono antibancarrota | ✅ | `POST /api/bonos/ejecutar-bono-diario`, Sesión 7 |
@@ -329,7 +351,7 @@ Requisitos explícitamente identificados y trabajados sesión por sesión, con s
 
 **Funcionalidad implementada sin un número de RF explícito durante las sesiones** (probablemente corresponde a RF01 y otros RF del enunciado que no se numeraron en esta conversación): creación de billetera con bono de bienvenida de 10 monedas, creación de apuestas con validación de saldo, cuotas fijas por pronóstico, una apuesta por partido, ledger de transacciones.
 
-**Importante - honestidad sobre esta lista:** en esta conversación nunca se compartió el enunciado oficial completo del proyecto, así que no tengo el texto exacto de RF01, RF13, RF14, RF15, RF16, RF18 (ni de otros RF no mencionados). No puedo confirmar con certeza si están cubiertos o no sin ese documento. Recomiendo contrastar esta tabla contra el enunciado oficial antes de la entrega.
+**Importante - honestidad sobre esta lista:** en esta conversación nunca se compartió el enunciado oficial completo del proyecto, así que no tengo el texto exacto de RF01, RF13, RF15, RF16, RF18 (ni de otros RF no mencionados). No puedo confirmar con certeza si están cubiertos o no sin ese documento. Recomiendo contrastar esta tabla contra el enunciado oficial antes de la entrega.
 
 ## 15. Mejoras futuras (pendientes, honestas)
 
