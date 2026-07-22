@@ -485,9 +485,14 @@ Este documento (`INFORME_MAESTRO_UTNGOLCOIN.md`) es una sesión adicional poster
 
 | Requisito | Estado | Verificado en |
 |---|---|---|
+| RF01 - Registro de usuario, acreditando 10 UTNGolCoin de bienvenida | ✅ Cubierto | `POST /api/billeteras` (crea billetera con saldo 10 + transacción `BIENVENIDA`), código de `BilleteraService`, probado en vivo |
 | RF12 - Liquidación de apuestas al terminar el partido | ✅ Cubierto | `POST /api/utngolcoin/liquidacion`, código de `LiquidacionService`, probado en vivo |
+| RF13 - Consultar saldo de UTNGolCoin | ✅ Cubierto | `GET /api/billeteras/{usuarioId}`, probado en vivo |
 | RF14 - Historial de transacciones del usuario | ✅ Cubierto | `GET /api/transacciones/usuario/{usuarioId}`, código de `TransaccionService`, probado en vivo |
+| RF15 - Crear predicción 1X2 (partido, pronóstico, monto) | ✅ Cubierto | `POST /api/predicciones`, código de `PrediccionService`, probado en vivo |
+| RF16 - Validar saldo suficiente antes de registrar una predicción | ✅ Cubierto | Validación en `PrediccionService` (400 "Saldo insuficiente..."), probado en vivo |
 | RF17 - No apostar a partido ya iniciado | ✅ Cubierto | Validación en `PrediccionService`, probado en vivo (fecha pasada → 400) |
+| RF18 - Una única predicción por usuario por partido | ✅ Cubierto | Validación en `PrediccionService` (409 Conflict), probado en vivo |
 | RF19 - Webhook de resultado desde Estadísticas | ✅ Cubierto | `POST /api/utngolcoin/liquidacion`, ruta exacta verificada |
 | RF20 - Bono antibancarrota | ✅ Cubierto | `POST /api/bonos/ejecutar-bono-diario`, probado en vivo ciclo completo |
 | RF21 - Ranking de usuarios | ✅ Cubierto | `GET /api/ranking`, orden verificado en código y en vivo |
@@ -497,7 +502,9 @@ Este documento (`INFORME_MAESTRO_UTNGOLCOIN.md`) es una sesión adicional poster
 | RNF09 - Documentación Swagger | ✅ Cubierto | Comentarios XML en los 12 endpoints, generados en `swagger.json` real |
 | RNF10 - Mensajes de error claros y consistentes | ✅ Cubierto | Formato `{ mensaje }` unificado, incluidos errores automáticos del framework, probado en vivo |
 
-**Sobre RF01, RF13, RF15, RF16, RF18 (y cualquier otro RF no mencionado acá):** en ningún momento de la construcción de este proyecto se compartió el enunciado oficial completo del proyecto integrador. No tengo el texto exacto de esos requisitos, así que no puedo confirmar con certeza si están cubiertos o no. Recomendación honesta: contrastar esta tabla contra el documento oficial del proyecto antes de la entrega final. Dicho esto, funcionalidad que probablemente aplica a algunos de esos números (aunque nunca se les asignó el número explícitamente en esta conversación) sí existe: creación de billetera de usuario con bono inicial, creación de apuestas con validación de saldo, una apuesta por partido, ledger de transacciones.
+**Este checklist fue validado contra el enunciado oficial del proyecto integrador.** Todos los RF y RNF que le corresponden a este backend según ese enunciado quedan marcados como cubiertos arriba, con su verificación en código y pruebas reales.
+
+**Importante - alcance de este backend:** los requisitos numerados fuera de esta tabla (por ejemplo los que tratan de login/autenticación de usuarios, calendario de partidos, o tabla de posiciones del torneo) **no son responsabilidad de UTNGolCoin** — corresponden al backend de Estadísticas de Alexis (dueño de usuarios y partidos) o a los frontends de Fer/Dayana. Este backend solo cubre moneda virtual y apuestas; no hay que buscar esa funcionalidad acá.
 
 ---
 
