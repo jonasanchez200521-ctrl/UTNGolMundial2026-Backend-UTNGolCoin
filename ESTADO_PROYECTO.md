@@ -166,6 +166,30 @@ Consulta rápida para mostrar el antes/después en la demo: dice si el usuario e
 
 **Cómo dejar rápido a un usuario en saldo 0 para la demo:** no hace falta ningún endpoint especial. Con lo que ya existe alcanza: `POST /api/predicciones` apostando **el saldo completo** que tenga el usuario a cualquier pronóstico (ej. `LOCAL`), y después `POST /api/utngolcoin/liquidacion` para ese mismo partido con el **resultado contrario** al que apostó (ej. `resultado: "VISITANTE"`), para que la apuesta quede PERDIDA y el saldo baje a 0 sin pagar nada.
 
+### `GET /api/reportes/monedas-circulacion` (RF27)
+Reporte administrativo: cuánto UTNGolCoin hay en total en el sistema.
+
+- **200 OK:**
+  ```json
+  { "totalMonedasEnCirculacion": 20.00, "cantidadBilleteras": 3, "totalPagadoEnPremios": 8.00 }
+  ```
+  - `totalMonedasEnCirculacion`: suma del `Saldo` de todas las billeteras.
+  - `cantidadBilleteras`: cuántas billeteras (usuarios) existen.
+  - `totalPagadoEnPremios`: suma de todas las transacciones tipo `PREMIO` (extra natural para el reporte, no pedido explícitamente pero fácil de calcular con lo que ya existe).
+
+### `GET /api/reportes/partidos-mas-apostados` (RF27)
+Reporte administrativo: qué partidos concentraron más predicciones, de mayor a menor cantidad.
+
+- **Parámetro opcional:** `?top=N` para limitar a los primeros N partidos. Sin el parámetro, devuelve a todos.
+- **200 OK:**
+  ```json
+  [
+    { "partidoId": 2001, "cantidadPredicciones": 2 },
+    { "partidoId": 3001, "cantidadPredicciones": 1 }
+  ]
+  ```
+- **400 Bad Request** - si `top` es <= 0.
+
 ## Estructura de carpetas (dentro de `UTNGolCoin.Api/UTNGolCoin.Api`)
 
 - `Controllers/` - Controladores de la API.
@@ -231,9 +255,14 @@ Consulta rápida para mostrar el antes/después en la demo: dice si el usuario e
 - Revisado `GET /api/predicciones/usuario/{usuarioId}` (de la Sesión 4): ya devolvía `partidoId`, `pronostico`, `monto`, `cuota`, `estado` y `fecha`, así que cumple RF22 sin cambios.
 - Probado manualmente con dos usuarios: apuestas ganadas y perdidas repartidas entre ambos, liquidadas, y se confirmó que el ranking los ordena bien por saldo y que el desempate por aciertos funciona entre usuarios con el mismo saldo.
 
+### Sesión 9 - Reportes básicos, RF27 (hecha)
+- Creado `Services/ReporteService.cs`: suma el saldo de todas las billeteras (monedas en circulación) y agrupa las predicciones por `PartidoId` contando cuántas tiene cada uno, ordenado de mayor a menor.
+- Creado `Controllers/ReportesController.cs` con `GET /api/reportes/monedas-circulacion` y `GET /api/reportes/partidos-mas-apostados` (parámetro opcional `?top=N`), documentados arriba.
+- Se agregó `totalPagadoEnPremios` al reporte de monedas en circulación como extra natural (suma de transacciones tipo `PREMIO`), ya que salía directo de una consulta simple.
+- Probado manualmente: los números del reporte de monedas coincidieron con una consulta SQL directa a la base (suma de saldos y de premios); se creó a propósito una segunda apuesta sobre un partido que ya tenía una, y se confirmó que el reporte de partidos más apostados lo ordena primero, con la cantidad correcta.
+
 ## Pendiente
 
-- Sesión 9: reportes.
 - Sesión 10: cierre y documentación final.
 - Modelado de entidades adicionales si hicieran falta (partidos, catálogo de usuarios local, etc.).
 - Integración real con la API de Estadísticas de Alexis (usar `EstadisticasApi:BaseUrl` para consultar la hora de los partidos en vez de confiar en el frontend).
