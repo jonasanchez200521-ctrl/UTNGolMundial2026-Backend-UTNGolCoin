@@ -132,6 +132,40 @@ Devuelve la tabla de clasificación pública de usuarios, para que Fer la muestr
 
 **Idempotencia:** el endpoint solo toca predicciones en estado PENDIENTE. Una vez liquidadas, quedan en GANADA/PERDIDA, así que si Alexis llama dos veces por el mismo partido (por sus reintentos configurados), o si lo llamás vos manualmente de nuevo, la segunda llamada no encuentra pendientes y responde `liquidadas: 0` sin pagar de nuevo. Probado manualmente: la segunda llamada al mismo partido no modifica el saldo.
 
+### `POST /api/bonos/ejecutar-bono-diario` (RF20 - bono antibancarrota)
+Da 1 UTNGolCoin a todos los usuarios con saldo <= 0 (en bancarrota) que todavía no recibieron el bono para la fecha indicada. Pensado para correrse una vez por día (por un proceso automático a futuro), pero **también sirve para dispararlo a mano desde Swagger en la demo**.
+
+- **Body (JSON), opcional:**
+  ```json
+  { "fecha": "2026-07-22" }
+  ```
+  Si no se manda `fecha` (o se manda body vacío `{}` / sin body), usa el día de hoy (UTC). **Mandar una fecha distinta en cada llamada es justamente cómo se simula "pasar de día" para la demo** (ver más abajo).
+- **200 OK - resumen:**
+  ```json
+  { "fecha": "2026-07-22", "cantidadBeneficiados": 1, "beneficiarios": [{ "usuarioId": 970, "saldoNuevo": 1.00 }] }
+  ```
+- No hay casos de error especiales: si nadie está en bancarrota, o todos ya recibieron el bono esa fecha, responde `200 OK` con `cantidadBeneficiados: 0` (no es un error).
+
+**Idempotencia por día:** la tabla `BonosDiarios` tiene un índice único en (`UsuarioId`, `Fecha`), así que un usuario no puede recibir dos bonos para la misma fecha aunque se ejecute el proceso varias veces con esa fecha.
+
+### `GET /api/bonos/estado/{usuarioId}`
+Consulta rápida para mostrar el antes/después en la demo: dice si el usuario está en bancarrota y si ya recibió el bono hoy.
+
+- **200 OK:**
+  ```json
+  { "usuarioId": 970, "saldo": 0.00, "enBancarrota": true, "yaRecibioBonoHoy": false, "fecha": "2026-07-22" }
+  ```
+- **404 Not Found** - si el usuario no tiene billetera creada.
+
+**Cómo simular el paso de un día en la demo (10 minutos, sin esperar 24hs):**
+1. Dejá a un usuario en saldo 0 apostando **todo** su saldo actual y liquidando esa apuesta con un resultado perdedor (ver más abajo cómo).
+2. `GET /api/bonos/estado/{usuarioId}` → mostrás en pantalla `enBancarrota: true`.
+3. `POST /api/bonos/ejecutar-bono-diario` sin body (usa "hoy") → el usuario recibe su moneda, saldo pasa a 1.
+4. Volvé a llamar `GET /api/bonos/estado/{usuarioId}` → ahora `enBancarrota: false`, `yaRecibioBonoHoy: true`. Esto demuestra que ya no vuelve a cobrar ese mismo día si lo ejecutás de nuevo.
+5. Para simular "el día siguiente": el usuario tiene que volver a quedar en 0 (si se gastó la moneda del bono apostando y perdiendo de nuevo, igual que en el paso 1). Ejecutá `POST /api/bonos/ejecutar-bono-diario` con `{ "fecha": "2026-07-23" }` (la fecha de "mañana") → vuelve a recibir su moneda. Así podés repetir el ciclo con fechas distintas para simular varios días seguidos en los 10 minutos de la exposición.
+
+**Cómo dejar rápido a un usuario en saldo 0 para la demo:** no hace falta ningún endpoint especial. Con lo que ya existe alcanza: `POST /api/predicciones` apostando **el saldo completo** que tenga el usuario a cualquier pronóstico (ej. `LOCAL`), y después `POST /api/utngolcoin/liquidacion` para ese mismo partido con el **resultado contrario** al que apostó (ej. `resultado: "VISITANTE"`), para que la apuesta quede PERDIDA y el saldo baje a 0 sin pagar nada.
+
 ## Estructura de carpetas (dentro de `UTNGolCoin.Api/UTNGolCoin.Api`)
 
 - `Controllers/` - Controladores de la API.
@@ -185,6 +219,12 @@ Devuelve la tabla de clasificación pública de usuarios, para que Fer la muestr
 - Idempotencia por diseño: solo se procesan predicciones PENDIENTES, así que llamar dos veces al mismo partido no vuelve a pagar (segunda llamada devuelve `liquidadas: 0`).
 - Probado manualmente el flujo completo: apuesta -> liquidar con resultado ganador (sube el saldo, transacción PREMIO, estado GANADA) -> apuesta que pierde -> liquidar (sin pago, estado PERDIDA) -> volver a liquidar el mismo partido (0 liquidadas, saldo sin cambios) -> resultado inválido (400) -> partido sin apuestas (200, 0 liquidadas) -> campos extra tipo `fase`/`grupo` no rompen la petición.
 
+### Sesión 7 - Bono antibancarrota, RF20 (hecha)
+- Creado `Services/BonoDiarioService.cs`: para una fecha dada, busca las billeteras con saldo <= 0 que todavía no recibieron bono esa fecha, les suma 1 UTNGolCoin, registra la transacción `BONO_DIARIO` y la entrega en `BonosDiarios`. También consulta el estado de bancarrota/bono de un usuario.
+- Creado `Controllers/BonosController.cs` con `POST /api/bonos/ejecutar-bono-diario` (fecha opcional, permite simular días distintos) y `GET /api/bonos/estado/{usuarioId}` (documentados arriba, con el paso a paso de cómo simular el paso de un día para la demo).
+- Idempotencia por día garantizada por el índice único (`UsuarioId`, `Fecha`) de `BonosDiarios` (ya creado desde la Sesión 2), además de un filtro explícito en el servicio.
+- Probado manualmente el flujo completo: usuario llevado a saldo 0 apostando todo y perdiendo -> `estado` muestra `enBancarrota: true` -> ejecutar bono para "hoy" da 1 moneda -> ejecutar de nuevo el mismo día no paga otra vez -> usuario vuelve a apostar y perder -> ejecutar bono con la fecha de "mañana" simulada paga de nuevo. Confirmado en la base que quedaron las dos filas en `BonosDiarios` (una por fecha) y las dos transacciones `BONO_DIARIO`.
+
 ### Sesión 8 - Ranking y consulta de apuestas, RF21 y RF22 (hecha)
 - Creado `Services/RankingService.cs`: junta cada billetera con sus predicciones (aciertos = GANADA, total = todas), ordenado por saldo descendente y, como desempate, por aciertos descendente.
 - Creado `Controllers/RankingController.cs` con `GET /api/ranking` (parámetro opcional `?top=N`, documentado arriba).
@@ -193,6 +233,7 @@ Devuelve la tabla de clasificación pública de usuarios, para que Fer la muestr
 
 ## Pendiente
 
+- Sesión 9: reportes.
+- Sesión 10: cierre y documentación final.
 - Modelado de entidades adicionales si hicieran falta (partidos, catálogo de usuarios local, etc.).
-- Endpoint para bono diario (usa la tabla `BonosDiarios` ya creada).
 - Integración real con la API de Estadísticas de Alexis (usar `EstadisticasApi:BaseUrl` para consultar la hora de los partidos en vez de confiar en el frontend).
