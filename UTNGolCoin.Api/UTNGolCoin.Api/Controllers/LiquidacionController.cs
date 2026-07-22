@@ -17,6 +17,15 @@ namespace UTNGolCoin.Api.Controllers
             _liquidacionService = liquidacionService;
         }
 
+        /// <summary>Webhook de resultados de partido (RF12/RF19). Ruta exacta acordada con el backend de Estadísticas de Alexis.</summary>
+        /// <remarks>
+        /// Paga <c>monto × cuota</c> a las predicciones PENDIENTES que coincidan con el resultado (pasan a GANADA)
+        /// y marca PERDIDA a las que no. Idempotente por diseño: solo toca predicciones PENDIENTES, así que llamar
+        /// dos veces para el mismo <c>partidoId</c> no vuelve a pagar. Alexis puede mandar campos extra (ej. fase, grupo),
+        /// se ignoran sin romper la petición. También sirve para disparo manual desde Swagger en la demo.
+        /// </remarks>
+        /// <response code="200">Resumen de la liquidación (0 liquidadas si no había pendientes o ya se había liquidado).</response>
+        /// <response code="400">PartidoId inválido o resultado distinto de LOCAL/EMPATE/VISITANTE.</response>
         [HttpPost]
         public async Task<IActionResult> Liquidar([FromBody] LiquidacionRequest request)
         {

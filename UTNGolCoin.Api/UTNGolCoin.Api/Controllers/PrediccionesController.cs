@@ -15,6 +15,16 @@ namespace UTNGolCoin.Api.Controllers
             _prediccionService = prediccionService;
         }
 
+        /// <summary>Crea una apuesta 1X2 (LOCAL/EMPATE/VISITANTE) sobre un partido y descuenta el monto de la billetera del usuario.</summary>
+        /// <remarks>
+        /// Valida en orden: monto mayor a 0, pronóstico válido, que el partido no haya cerrado por hora (RF17),
+        /// que el usuario tenga billetera, que el saldo alcance, y que no exista ya una predicción del usuario
+        /// para ese partido (una apuesta por partido). <c>fechaInicioPartido</c> debe mandarse en UTC (formato ISO 8601 con "Z").
+        /// </remarks>
+        /// <response code="201">Predicción creada en estado PENDIENTE.</response>
+        /// <response code="400">Datos inválidos, partido ya cerrado por hora, o saldo insuficiente.</response>
+        /// <response code="404">El usuario no tiene billetera creada.</response>
+        /// <response code="409">El usuario ya tiene una predicción para ese partido.</response>
         [HttpPost]
         public async Task<IActionResult> Crear([FromBody] CrearPrediccionRequest request)
         {
@@ -44,6 +54,8 @@ namespace UTNGolCoin.Api.Controllers
             }
         }
 
+        /// <summary>Devuelve todas las predicciones de un usuario (más recientes primero), con su estado (PENDIENTE/GANADA/PERDIDA).</summary>
+        /// <response code="200">Lista de predicciones (vacía si el usuario no apostó todavía).</response>
         [HttpGet("usuario/{usuarioId}")]
         public async Task<IActionResult> ObtenerPorUsuario(int usuarioId)
         {

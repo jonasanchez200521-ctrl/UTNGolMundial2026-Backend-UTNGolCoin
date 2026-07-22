@@ -15,6 +15,11 @@ namespace UTNGolCoin.Api.Controllers
             _billeteraService = billeteraService;
         }
 
+        /// <summary>Crea la billetera de un usuario nuevo y le acredita el bono de bienvenida de 10 UTNGolCoin.</summary>
+        /// <remarks>El usuario en sí no se crea acá (vive en el backend de Estadísticas de Alexis); esto solo crea su billetera local, referenciada por <c>usuarioId</c>.</remarks>
+        /// <response code="201">Billetera creada con saldo 10.</response>
+        /// <response code="400">UsuarioId falta o es menor o igual a 0.</response>
+        /// <response code="409">El usuario ya tiene una billetera creada.</response>
         [HttpPost]
         public async Task<IActionResult> Crear([FromBody] CrearBilleteraRequest request)
         {
@@ -34,6 +39,9 @@ namespace UTNGolCoin.Api.Controllers
             }
         }
 
+        /// <summary>Devuelve el saldo y los datos de la billetera de un usuario.</summary>
+        /// <response code="200">Datos de la billetera.</response>
+        /// <response code="404">El usuario todavía no tiene billetera creada.</response>
         [HttpGet("{usuarioId}")]
         public async Task<IActionResult> ObtenerPorUsuario(int usuarioId)
         {

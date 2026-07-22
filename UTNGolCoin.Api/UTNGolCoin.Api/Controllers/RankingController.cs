@@ -14,6 +14,10 @@ namespace UTNGolCoin.Api.Controllers
             _rankingService = rankingService;
         }
 
+        /// <summary>Tabla de clasificación pública de usuarios (RF21), ordenada por saldo y luego por aciertos.</summary>
+        /// <param name="top">Opcional: limita a los primeros N puestos. Sin este parámetro, devuelve a todos los usuarios con billetera.</param>
+        /// <response code="200">Lista ordenada del ranking.</response>
+        /// <response code="400">El parámetro top es menor o igual a 0.</response>
         [HttpGet]
         public async Task<IActionResult> Obtener([FromQuery] int? top)
         {

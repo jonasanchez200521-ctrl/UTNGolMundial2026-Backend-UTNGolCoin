@@ -6,6 +6,8 @@ namespace UTNGolCoin.Api.Controllers
     [Route("api/[controller]")]
     public class HealthController : ControllerBase
     {
+        /// <summary>Chequeo simple de que el servicio está arriba y respondiendo.</summary>
+        /// <response code="200">El servicio está funcionando.</response>
         [HttpGet]
         public IActionResult Get()
         {
